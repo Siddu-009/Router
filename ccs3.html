@@ -1,0 +1,391 @@
+1) ఏ ఫైళ్లు కావాలి (ఫైలు లిస్టు)
+
+
+seed_vendors.js — (JS script) stations → generate vendors & menus JSON
+
+
+seed_vendors.json — (ఎల<|vq_image_4545|><|vq_image_8876|><|vq_image_8168|><|vq_image_6601|><|vq_image_15434|><|vq_image_12152|><|vq_image_2100|><|vq_image_3528|><|vq_image_5650|><|vq_image_2236|><|vq_image_7316|><|vq_image_11369|><|vq_image_15238|><|vq_image_974|><|vq_image_9934|><|vq_image_7297|><|vq_image_12616|><|vq_image_4719|><|vq_image_8324|><|image_border_783|><|vq_image_115|><|vq_image_9000|><|vq_image_1079|><|vq_image_9469|><|vq_image_9272|><|vq_image_4668|><|vq_image_11151|><|vq_image_12743|><|vq_image_647|><|vq_image_11067|><|vq_image_10473|><|vq_image_896|><|vq_image_4534|><|vq_image_6855|><|vq_image_5984|><|vq_image_14285|><|vq_image_7678|><|vq_image_12923|><|vq_image_304|><|vq_image_869|><|vq_image_3516|><|vq_image_11847|><|vq_image_14258|><|vq_image_2368|>
+
+
+
+2) seed_vendors.js — (copy this and run node seed_vendors.js to create seed_vendors.json)
+// seed_vendors.js
+// Node script: generates mock vendors & menus for the RouterUchi prototype.
+// Run: node seed_vendors.js  -> creates seed_vendors.json in same folder
+
+const fs = require('fs');
+const path = require('path');
+
+const STATIONS = [
+  // (example subset, include all stations you want)
+  { state: 'Telangana', station: 'Hyderabad', code: 'HYB' },
+  { state: 'Telangana', station: 'Secunderabad', code: 'SC' },
+  { state: 'Andhra Pradesh', station: 'Vijayawada', code: 'BZA' },
+  { state: 'Tamil Nadu', station: 'Chennai Central', code: 'MAS' },
+  // ... add all stations you want (use the full DATA from canvas)
+];
+
+// helper: destination point approx (km, bearing)
+function destinationPoint(lat, lon, km, bearingDeg){
+  const R = 6371;
+  const brng = bearingDeg * Math.PI/180;
+  const lat1 = lat * Math.PI/180;
+  const lon1 = lon * Math.PI/180;
+  const lat2 = Math.asin(Math.sin(lat1)*Math.cos(km/R) +
+    Math.cos(lat1)*Math.sin(km/R)*Math.cos(brng));
+  const lon2 = lon1 + Math.atan2(Math.sin(brng)*Math.sin(km/R)*Math.cos(lat1),
+    Math.cos(km/R)-Math.sin(lat1)*Math.sin(lat2));
+  return { lat: lat2*180/Math.PI, lng: lon2*180/Math.PI };
+}
+
+// rough per-state center coords (for demo randomization) — replace with real geocodes if available
+const STATE_CENTER = {
+  'Telangana':[18.1124,79.0193], 'Andhra Pradesh':[15.9129,79.7400],
+  'Tamil Nadu':[11.1271,78.6569], 'Karnataka':[15.3173,75.7139], 'Kerala':[10.8505,76.2711],
+  'Maharashtra':[19.7515,75.7139], 'Gujarat':[22.2587,71.1924], 'West Bengal':[22.9868,87.8550]
+  // add more states...
+};
+
+function rand(min,max){ return min + Math.random()*(max-min); }
+
+const vendors = [];
+const menus = [];
+let vid = 1;
+
+STATIONS.forEach(st=>{
+  const base = STATE_CENTER[st.state] || [20.0,78.0];
+  const [baseLat, baseLng] = base;
+  const numVendors = 8; // demo
+  for(let i=0;i<numVendors;i++){
+    const bearing = rand(0,360);
+    const dist = rand(0,5.0);
+    const pos = destinationPoint(baseLat, baseLng, dist, bearing);
+    const types = ['restaurant','hotel','shop','pharmacy'];
+    let type = types[Math.floor(Math.random()*types.length)];
+    if(i===0) type = 'pharmacy'; // ensure at least one pharmacy near station
+    const id = 'v' + (vid++).toString().padStart(6,'0');
+    const vendor = {
+      _id: id,
+      name: `${st.station} ${type} ${i+1}`,
+      type, station: st.station, stationCode: st.code || '',
+      lat: pos.lat, lng: pos.lng,
+      address: `Demo address near ${st.station}`, rating: (3 + Math.random()*2).toFixed(1),
+      openHours: '08:00-22:00', active: true,
+      pharmacy: type==='pharmacy' ? { acceptsPNR: true } : null
+    };
+    vendors.push(vendor);
+    // simple menu
+    const menu = {
+      vendorId: id,
+      categories:[
+        { name:'Biryani', items:[{ id:id+'_m1', name:'Chicken Biryani', price:180 }] },
+        { name:'Snacks', items:[{ id:id+'_m2', name:'Masala Vada', price:40 }] },
+        { name:'Beverages', items:[{ id:id+'_m3', name:'Filter Coffee', price:30 }] }
+      ]
+    };
+    if(type==='pharmacy') {
+      menu.categories.push({ name:'Pharma', items:[
+        { id: id+'_p1', name:'Paracetamol 500mg (Strip 10)', price:50, requiresPrescription:false },
+        { id: id+'_p2', name:'Antacid Tablets (10)', price:60, requiresPrescription:false }
+      ]});
+    }
+    menus.push(menu);
+  }
+});
+
+const out = { stations: STATIONS, vendors, menus };
+fs.writeFileSync(path.join(__dirname,'seed_vendors.json'), JSON.stringify(out,null,2));
+console.log('Created seed_vendors.json with', vendors.length, 'vendors');
+
+
+Tip: Replace the STATIONS array with the full list of stations you want (copy the flattened DATA earlier in the app). For production, geocode station names to real lat/lng via Google Geocoding.
+
+
+3) server.js — minimal Node/Express backend (APIs used by frontend & delivery app)
+// server.js
+const express = require('express');
+const fs = require('fs'), path = require('path');
+const bodyParser = require('body-parser'), cors = require('cors');
+const app = express();
+app.use(cors()); app.use(bodyParser.json());
+
+const seed = JSON.parse(fs.readFileSync(path.join(__dirname,'seed_vendors.json')));
+const VENDORS = seed.vendors;
+const MENUS = seed.menus;
+const STATIONS = seed.stations;
+
+function distKm(a,b){
+  const R=6371;
+  const dLat=(b.lat-a.lat)*Math.PI/180;
+  const dLon=(b.lng-a.lng)*Math.PI/180;
+  const lat1=a.lat*Math.PI/180, lat2=b.lat*Math.PI/180;
+  const aa=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  const c=2*Math.atan2(Math.sqrt(aa),Math.sqrt(1-aa));
+  return R*c;
+}
+
+app.get('/api/stations', (req,res)=> res.json({stations: STATIONS}));
+app.get('/api/vendors', (req,res)=>{
+  const { station, withinKm=5, lat, lng } = req.query;
+  let out = VENDORS.filter(v=> !station || v.station===station);
+  if(lat && lng){
+    out = out.filter(v => distKm({lat:+lat,lng:+lng},{lat:v.lat,lng:v.lng}) <= +withinKm);
+  }
+  res.json({vendors: out});
+});
+app.get('/api/vendors/:id/menu', (req,res)=>{
+  const menu = MENUS.find(m=> m.vendorId===req.params.id);
+  if(!menu) return res.status(404).json({error:'No menu'});
+  res.json(menu);
+});
+app.post('/api/orders', (req,res)=>{
+  const { customer, vendorId, items, deliveryAddress, pnr } = req.body;
+  const order = { id: 'ord_'+Date.now(), status:'ORDER_PLACED', vendorId, items, amount: items.reduce((s,i)=>s+i.price*i.qty,0), deliveryFee: 40, pnr: pnr||null };
+  const vendor = VENDORS.find(v=>v._id===vendorId);
+  if(pnr && vendor && vendor.pharmacy && vendor.pharmacy.acceptsPNR){
+    order.deliveryTarget = { type:'PNR', trainPNR: pnr };
+  }
+  // In prod: persist order, push notifications to vendor & delivery service
+  res.json({order});
+});
+
+app.listen(5000, ()=> console.log('API running on http://localhost:5000'));
+
+How to run backend:
+
+
+npm init -y
+
+
+npm i express body-parser cors
+
+
+Place seed_vendors.json produced by seed script in same folder and run node server.js.
+
+
+
+4) Frontend prototype (single HTML + JS) — index.html + app.js
+index.html (very small):
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>RouterUchi Prototype</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>body{font-family:Arial;margin:16px;} .card{border:1px solid #ddd;padding:8px;border-radius:6px;margin-bottom:8px;}</style>
+</head>
+<body>
+  <h1>RouterUchi — Prototype</h1>
+  <label>Station:
+    <select id="stationSelect"></select>
+  </label>
+  <button id="load">Load Vendors (5km)</button>
+  <div id="vendors"></div>
+
+  <!-- Add Google Maps JS here when integrating maps:
+  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_KEY&libraries=places"></script>
+  -->
+  <script src="app.js"></script>
+</body>
+</html>
+
+app.js:
+async function loadStations(){
+  const res = await fetch('/api/stations');
+  const data = await res.json();
+  const sel = document.getElementById('stationSelect');
+  data.stations.forEach(s=> {
+    const opt = document.createElement('option');
+    opt.value = s.station;
+    opt.text = `${s.station} — ${s.state}`;
+    sel.appendChild(opt);
+  });
+}
+async function loadVendors(){
+  const station = document.getElementById('stationSelect').value;
+  const res = await fetch('/api/vendors?station='+encodeURIComponent(station)+'&withinKm=5');
+  const data = await res.json();
+  const wrap = document.getElementById('vendors');
+  wrap.innerHTML='';
+  data.vendors.forEach(v=>{
+    const div = document.createElement('div'); div.className='card';
+    div.innerHTML = `<strong>${v.name}</strong><div>${v.type} — ${v.address}</div>
+      <div>Rating: ${v.rating}</div>
+      <button onclick="order('${v._id}')">Order</button>
+      ${v.type==='pharmacy' ? `<button onclick="orderForPNR('${v._id}')">Order for PNR</button>` : ''}`;
+    wrap.appendChild(div);
+  });
+}
+function order(vendorId){
+  const items = [{ id:'sample', name:'Sample Item', price:100, qty:1 }];
+  fetch('/api/orders',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ customer:{name:'Test'}, vendorId, items })})
+    .then(r=>r.json()).then(d=>alert('Order placed: '+JSON.stringify(d.order)));
+}
+function orderForPNR(vendorId){
+  const pnr = prompt('Enter passenger PNR number (required)');
+  if(!pnr) return alert('PNR required');
+  const items = [{ id:'med1', name:'Paracetamol', price:50, qty:1 }];
+  fetch('/api/orders',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ customer:{name:'PNR Passenger'}, vendorId, items, pnr })})
+    .then(r=>r.json()).then(d=>alert('PNR Order placed: '+JSON.stringify(d.order)));
+}
+document.getElementById('load').addEventListener('click', loadVendors);
+loadStations();
+
+
+This frontend talks to /api/* endpoints on the backend. When you integrate Google Maps, you will show markers for each vendor using vendor lat/lng from /api/vendors.
+
+
+5) Google Maps integration (how to show vendors + station + routing distance for delivery fee)
+
+
+Include Maps JS in index.html:
+
+
+<script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_KEY&libraries=places"></script>
+
+
+
+Basic map snippet (inside app.js) — create map, place markers:
+
+
+let map;
+function initMap(center){ // center = {lat,lng}
+  map = new google.maps.Map(document.getElementById('map'), { center, zoom:13 });
+}
+function addMarker(markerData){
+  const m = new google.maps.Marker({ position:{lat:+markerData.lat,lng:+markerData.lng}, map, title: markerData.name });
+  m.addListener('click', ()=> {
+    // show vendor card or info window
+  });
+}
+
+
+
+To compute driving distance (for fee): use DirectionsService or Distance Matrix API. Example (Distance Matrix):
+
+
+const service = new google.maps.DistanceMatrixService();
+service.getDistanceMatrix({
+  origins: [new google.maps.LatLng(vendorLat, vendorLng)],
+  destinations: [new google.maps.LatLng(customerLat, customerLng)],
+  travelMode: 'DRIVING'
+}, (resp, status) => {
+  if(status === 'OK') {
+    const distMeters = resp.rows[0].elements[0].distance.value;
+    const distKm = distMeters / 1000;
+    const fee = Math.max(25, 20 + distKm * 8); // sample formula
+  }
+});
+
+
+6) PNR-based delivery specifics (pharmacy & passengers on trains)
+
+
+Vendor side: If vendor.pharmacy.acceptsPNR is true, show an “Order for PNR” option.
+
+
+Order payload: include pnr, passengerName, optional coach, seat, trainNo, expectedStation.
+
+
+Backend handling: store pnr in order, mark deliveryTarget.type='PNR'. Delivery assignment system should know train schedule to ensure deliver at correct station/time.
+
+
+Verification: require passenger last 3 digits of PNR + name + coach to avoid fraud. Admin verification UI will be needed.
+
+
+
+7) Delivery Boys app (mobile web) — features & minimal flow
+Features
+
+
+Login (phone + OTP)
+
+
+Assigned orders list (pickup vendor → delivery target (customer address or PNR train stop))
+
+
+Map with route: vendor → customer/station
+
+
+Status transitions: Accept → Picked up → On route → Delivered → Completed
+
+
+Cash collection record if COD
+
+
+Simple UI: list cards + map view
+
+
+API examples
+
+
+GET /api/delivery/assigned?driverId=xxx
+
+
+POST /api/delivery/:orderId/status { status: 'PICKED_UP' }
+
+
+You can implement delivery boy UI as a mobile-first React page that polls GET /api/delivery/assigned.
+
+8) Database (MongoDB) schema suggestions
+Stations
+{ code, name, state, lat, lng, city }
+
+Vendors
+{ _id, name, type, stationCode, station, lat, lng, address, rating, openHours, menuId, kyc:{status,docs}, bank:{}, pharmacy:{acceptsPNR:true} }
+
+Menus
+{ vendorId, categories:[{ name, items:[{id,name,price,requiresPrescription,modifiers[]}] }] }
+
+Orders
+{ id, customer:{name,phone}, vendorId, items, amount, deliveryFee, pnr, deliveryTarget, status, driverId, timestamps }
+
+
+9) CSV/Excel menu upload template (columns)
+
+
+vendorId,category,name,price,veg,requiresPrescription,modifierName:modifierPrice|...
+
+
+Provide a sample CSV generator in Node if you want.
+
+10) Security & production notes
+
+
+Payment: integrate UPI / Razorpay / Stripe; do not store card details.
+
+
+Media: use signed URLs (S3/GCS).
+
+
+PNR privacy: store minimal PII and ensure verification.
+
+
+Google Maps: enable billing & Directions API for production.
+
+
+Scalability: use message queue for order dispatch, worker for delivery assignment.
+
+
+
+11) Next steps I can do immediately for you (pick one)
+I couldn’t create files automatically just now (tool limitation). Tell me which of these you want me to produce next and I will generate the actual files (or prepare them for you) when the tool is available or guide you step-by-step:
+
+
+I’ll produce a full ZIP repo (frontend + backend + seed_vendors.json + README) ready to download.
+
+
+I’ll generate a complete seed file containing all stations you listed (flattened) and vendors within 5km.
+
+
+I’ll create the full React components for FoodMenus, VendorOnboard, DeliveryBoy UI and add them to the canvas (copy-paste ready).
+
+
+I’ll produce API & DB ready Postman collection and deployment instructions for Heroku/Vercel + MongoDB Atlas.
+
+
+I’ll create a hosted demo (requires deploying) — I can prepare deployment scripts.
+
+
+మీరు ఏ option కావాలో సంక్షిప్తంగా చెప్పండి (numeric ok) — నేను వెంటనే ఆయన సంగతిని తయారుచేసేస్తాను.
+మీకు తెలుగు లో మరింత వివరాలు కావాలంటే చైయ్యండి — నేను అదే భాషలో పూర్తిగా ముందుకు సాగతాను.
